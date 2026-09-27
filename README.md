@@ -26,7 +26,7 @@ deploy/
   deploy-dev.yml
 ```
 
-The architecture uses two private tasks across two AZs, one NAT, HTTP ALB→Java, isolated single-AZ RDS with verified TLS, and one SSM-only EC2 runner. Initial sizing and one-week budget are planning assumptions, not load or cost guarantees. Terraform owns private ECR repositories; the monitoring operator supplies Grafana/Prometheus/Loki/Tempo; this repository contains no homelab installation or Cloudflare configuration.
+Users resolve the API hostname through an operator-managed Cloudflare DNS-only CNAME pointing to the ALB, then connect directly to the ALB over HTTPS. The architecture uses two private tasks across two AZs, one NAT, HTTP ALB→Java, isolated single-AZ RDS with verified TLS, and one SSM-only EC2 runner. Initial sizing and one-week budget are planning assumptions, not load or cost guarantees. Terraform owns private ECR repositories; the monitoring operator supplies Grafana/Prometheus/Loki/Tempo; this repository contains no homelab installation or Cloudflare configuration.
 
 ## Local validation
 
