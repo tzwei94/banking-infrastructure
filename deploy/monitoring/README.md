@@ -1,10 +1,10 @@
 # Task telemetry contract
 
-Build from the deployment repository root with `docker build -t banking-alloy:local deploy/monitoring`. Each Fargate task has exactly one sidecar. Its loopback receiver accepts OTLP/HTTP on 4318; it scrapes the loopback Actuator listener on 9000 every 60 seconds. Neither listener is in an ECS ingress rule or ALB target. `constants.hostname` supplies a distinct metric instance per task.
+Build from the deployment repository root with `docker build -t banking-alloy:local deploy/monitoring`. Each application Fargate task has exactly one sidecar; migration and bootstrap tasks contain only Java. Its loopback receiver accepts OTLP/HTTP on 4318; it scrapes the loopback Actuator listener on 9000 every 60 seconds. Neither listener is in an ECS ingress rule or ALB target. `constants.hostname` supplies a distinct metric instance per task.
 
-`TELEMETRY_USERNAME` and `TELEMETRY_PASSWORD` come from Secrets Manager. This implementation uses HTTP Basic authentication over verified public HTTPS. The telemetry ingestion gateway must implement that contract; browser login and Cloudflare Access redirects are incompatible. `TRACES_BASE_URL` excludes `/v1/traces`; the OTLP HTTP exporter appends it. Loki and metrics variables contain their complete API paths. Public endpoint readiness has not been established.
+`TELEMETRY_USERNAME` and `TELEMETRY_PASSWORD` come from Secrets Manager. This implementation uses HTTP Basic authentication over verified public HTTPS. The telemetry ingestion gateway must implement that contract; browser login and Cloudflare Access redirects are incompatible. `TRACES_BASE_URL` excludes `/v1/traces`; the OTLP HTTP exporter appends it. Loki and metrics variables contain their complete API paths. Verify ingestion, authentication and query isolation in the target environment; configuration and local fixture success do not establish public endpoint readiness.
 
-Logback writes JSON with OTel `trace_id`/`span_id` fields to shared files; these identifiers never become Loki stream labels. Files rotate at 10 MiB with a 30 MiB archived-file cap (plus the active file). Alloy has read-only log access and a separate writable state volume. Console WARN/ERROR output is a bounded CloudWatch fallback, retained seven days. Loki retries five times, with at most ten seconds between retries; this pipeline can drop logs during an extended outage. Metrics WAL age is capped at fifteen minutes; queue capacity is 2,500 samples per shard, two shards maximum. Trace memory limiting, 128 queued batches and a sixty-second retry horizon bound the trace path. Task termination loses ephemeral files/WAL; none of these settings promises durable buffering.
+Logback writes JSON with OTel `trace_id`/`span_id` fields to shared files; these identifiers never become Loki stream labels. Files rotate at 10 MiB with a 30 MiB archived-file cap (plus the active file). Alloy has read-only log access and a separate writable state volume. The application’s console WARN/ERROR output is a bounded CloudWatch fallback, retained seven days; administrative task output and Alloy warnings also use the task log group. ECS uses non-blocking logging with a 1 MiB buffer per container. Loki retries five times, with at most ten seconds between retries; this pipeline can drop logs during an extended outage. Metrics WAL age is capped at fifteen minutes; queue capacity is 2,500 samples per shard, two shards maximum. Trace memory limiting, 128 queued batches and a sixty-second retry horizon bound the trace path. Task termination loses ephemeral files/WAL; none of these settings promises durable buffering.
 
 The initial task limit is 512 CPU units / 1,024 MiB: Java 704 MiB and Alloy 320 MiB. The local smoke test exercises these memory limits; production load, two-task cardinality, shutdown delivery and long outages still require measurement on AWS. OTel samples 10% of new traces, follows parent sampling, and disables the OpenTelemetry starter's log and metric exporters to avoid duplicate delivery. Local smoke uses 100% sampling.
 
@@ -18,7 +18,7 @@ Useful acceptance queries after deployment:
 
 The monitoring operator manages Grafana data sources, dashboards and storage. AWS Terraform creates ALB/ECS/RDS/runner alarms and budget notifications; confirm the SNS email subscription. The budget alert is account-wide and monthly: it is a warning, not a US$100 spending cap or an automatic shutdown.
 
-The pinned Alloy 1.20.0 image passed the [recorded vulnerability scan](security-review.md). The publication script repeats the scan before pushing.
+The pinned Alloy 1.20.0 image passed a prior point-in-time [recorded vulnerability scan](security-review.md). The publication script repeats the scan before pushing.
 
 ## Reuse this image
 
@@ -115,8 +115,8 @@ log files must also be readable by UID 10001.
 Java images package the checksum-verified database CA at
 `/opt/app/certs/rds-ca.pem`; app, migration and bootstrap use it with
 `sslmode=verify-full`. Alloy has no database responsibilities. Certificate rotation
-requires a Java-image rebuild, not an Alloy rebuild. Rebuild and publish both
-images before deploying these new task definitions; retain previous image digests
+requires a Java-image rebuild, not an Alloy rebuild. When upgrading from older volume/certificate conventions, rebuild and publish both
+images before deploying the matching task definitions; retain previous image digests
 and task definitions for rollback. Local tests do not establish live Fargate
 volume initialization or RDS connectivity.
 
@@ -131,8 +131,22 @@ API_IMAGE=banking-api:local ALLOY_IMAGE=banking-alloy:local \
   bash deploy/tests/test-container-volumes.sh
 ```
 
-The telemetry fixture decodes received payloads to check a second application's
-service labels and checks a mounted config replacement. The volume check covers
+The telemetry fixture decodes received log/metric payloads to check a second application's
+service labels and checks readiness with a mounted config replacement. It does not
+send traces or verify public HTTPS authentication; the application smoke fixture
+checks the three-signal local banking path. The volume check covers
 both initialization orders, non-root writes, read-only logs, certificate access
 and preservation of existing root-owned volumes. Run `scripts/local-smoke.sh` in
 the application repository for the full banking telemetry path.
+
+## Runner host metrics
+
+`runner.alloy` is a separate host-metrics pipeline; it is not used by the ECS
+sidecar. On the EC2 runner, provision `/etc/alloy/runner.env` as a root-owned
+mode-0600 file containing `METRICS_URL`, `TELEMETRY_USERNAME` and
+`TELEMETRY_PASSWORD`. Run `deploy/provisioning/install-runner-alloy.sh VERSION SHA256` as root through SSM, using a reviewed Linux amd64 release archive checksum.
+The installer starts `banking-alloy.service` as the `alloy` user with a 256 MiB
+memory cap and persistent state at `/var/lib/alloy`. Confirm service status and
+remote `job="banking-runner"` samples separately. Terraform’s runner status alarm
+does not monitor disk usage; configure a host disk alert in the external monitoring
+service.
