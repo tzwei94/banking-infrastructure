@@ -1,4 +1,4 @@
-name: Publish Alloy
+name: I. Publish Alloy Image
 
 on:
   workflow_dispatch:

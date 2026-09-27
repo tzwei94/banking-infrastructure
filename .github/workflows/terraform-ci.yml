@@ -1,4 +1,4 @@
-name: Validate deployment
+name: A. Deployment CI
 on:
   pull_request:
   push:

@@ -1,4 +1,4 @@
-name: Promote or roll back a tested digest
+name: B. Deploy or Roll Back
 on:
   workflow_dispatch:
     inputs:
