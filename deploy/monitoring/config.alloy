@@ -1,0 +1,80 @@
+logging { level = "warn" }
+
+local.file_match "application" {
+  path_targets = [{"__path__" = coalesce(sys.env("LOG_GLOB"), "/var/log/app/*.log"), "service_name" = coalesce(sys.env("SERVICE_NAME"), "app"), "environment" = sys.env("ENVIRONMENT"), "instance" = constants.hostname}]
+}
+loki.source.file "application" {
+  targets = local.file_match.application.targets
+  forward_to = [loki.write.gateway.receiver]
+}
+loki.write "gateway" {
+  endpoint {
+    url = sys.env("LOKI_URL")
+    batch_size = "256KiB"
+    max_backoff_period = "10s"
+    max_backoff_retries = 5
+    basic_auth {
+      username = sys.env("TELEMETRY_USERNAME")
+      password = sys.env("TELEMETRY_PASSWORD")
+    }
+  }
+}
+prometheus.scrape "application" {
+  targets = [{"__address__" = coalesce(sys.env("METRICS_TARGET"), "127.0.0.1:9090"), "instance" = constants.hostname, "job" = coalesce(sys.env("SERVICE_NAME"), "app"), "environment" = sys.env("ENVIRONMENT")}]
+  metrics_path = coalesce(sys.env("METRICS_PATH"), "/metrics")
+  scrape_interval = coalesce(sys.env("METRICS_SCRAPE_INTERVAL"), "60s")
+  scrape_timeout = coalesce(sys.env("METRICS_SCRAPE_TIMEOUT"), "10s")
+  forward_to = [prometheus.remote_write.gateway.receiver]
+}
+prometheus.remote_write "gateway" {
+  endpoint {
+    url = sys.env("METRICS_URL")
+    basic_auth {
+      username = sys.env("TELEMETRY_USERNAME")
+      password = sys.env("TELEMETRY_PASSWORD")
+    }
+    queue_config {
+      capacity = 2500
+      max_shards = 2
+      max_samples_per_send = 500
+      sample_age_limit = "15m"
+    }
+  }
+  wal {
+    truncate_frequency = "5m"
+    min_keepalive_time = "5m"
+    max_keepalive_time = "15m"
+  }
+}
+otelcol.receiver.otlp "application" {
+  http { endpoint = coalesce(sys.env("OTLP_HTTP_ADDRESS"), "127.0.0.1:4318") }
+  output { traces = [otelcol.processor.memory_limiter.application.input] }
+}
+otelcol.processor.memory_limiter "application" {
+  check_interval = "1s"
+  limit = "64MiB"
+  spike_limit = "16MiB"
+  output { traces = [otelcol.processor.batch.application.input] }
+}
+otelcol.processor.batch "application" {
+  send_batch_size = 256
+  send_batch_max_size = 512
+  timeout = "5s"
+  output { traces = [otelcol.exporter.otlphttp.gateway.input] }
+}
+otelcol.auth.basic "gateway" {
+  username = sys.env("TELEMETRY_USERNAME")
+  password = sys.env("TELEMETRY_PASSWORD")
+}
+otelcol.exporter.otlphttp "gateway" {
+  client {
+    endpoint = sys.env("TRACES_BASE_URL")
+    auth = otelcol.auth.basic.gateway.handler
+    timeout = "10s"
+  }
+  sending_queue {
+    num_consumers = 2
+    queue_size = 128
+  }
+  retry_on_failure { max_elapsed_time = "60s" }
+}

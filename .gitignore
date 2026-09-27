@@ -1,0 +1,33 @@
+# Terraform state, plans and private profiles
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.plan
+*.tfvars
+*.tfvars.json
+!*.tfvars.json.example
+!*.example.tfvars
+!*.example.tfvars.json
+*.hcl
+!.terraform.lock.hcl
+!*.hcl.example
+!*.tftest.hcl
+
+# Local data and credentials
+.private/
+local-data/
+backups/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+credentials*
+secrets.local*
+*.pdf
+*.log
+__pycache__/
+.DS_Store

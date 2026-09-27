@@ -1,0 +1,58 @@
+name: Promote or roll back a tested digest
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: Tested banking-api repository@sha256 digest
+        required: true
+      alloy_image:
+        description: Validated banking-alloy repository@sha256 digest
+        required: true
+      source_sha:
+        description: Full application source commit SHA
+        required: true
+      action:
+        type: choice
+        options: [deploy, rollback]
+        default: deploy
+      first_release:
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: banking-dev-deploy
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    environment: dev
+    runs-on: [self-hosted, linux, x64, banking-deploy]
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: 1.16.1
+          terraform_wrapper: false
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff
+      - uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - run: deploy/scripts/ci-release.sh
+        env:
+          DEV_TFVARS_JSON: ${{ vars.DEV_TFVARS_JSON }}
+          IMAGE: ${{ inputs.image }}
+          ALLOY_IMAGE: ${{ inputs.alloy_image }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          ACTION: ${{ inputs.action }}
+          FIRST_RELEASE: ${{ inputs.first_release }}
+          STATE_BUCKET: ${{ vars.STATE_BUCKET }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          NAME: banking-dev
+          API_URL: ${{ vars.API_URL }}
+          TOKEN_USERNAME: ${{ secrets.TOKEN_USERNAME }}
+          TOKEN_PASSWORD: ${{ secrets.TOKEN_PASSWORD }}

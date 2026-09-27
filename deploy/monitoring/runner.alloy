@@ -1,0 +1,40 @@
+logging { level = "warn" }
+prometheus.exporter.unix "runner" {
+  disable_collectors = ["mdadm", "zfs"]
+}
+prometheus.scrape "runner" {
+  targets = prometheus.exporter.unix.runner.targets
+  scrape_interval = "60s"
+  forward_to = [prometheus.relabel.runner.receiver]
+}
+prometheus.relabel "runner" {
+  forward_to = [prometheus.remote_write.gateway.receiver]
+  rule {
+    target_label = "job"
+    replacement = "banking-runner"
+  }
+  rule {
+    target_label = "instance"
+    replacement = constants.hostname
+  }
+}
+prometheus.remote_write "gateway" {
+  endpoint {
+    url = sys.env("METRICS_URL")
+    basic_auth {
+      username = sys.env("TELEMETRY_USERNAME")
+      password = sys.env("TELEMETRY_PASSWORD")
+    }
+    queue_config {
+      capacity = 2500
+      max_shards = 2
+      max_samples_per_send = 500
+      sample_age_limit = "15m"
+    }
+  }
+  wal {
+    truncate_frequency = "5m"
+    min_keepalive_time = "5m"
+    max_keepalive_time = "15m"
+  }
+}
