@@ -206,6 +206,34 @@ run "legacy_github_subjects_remain_supported" {
   }
 }
 
+run "alloy_publisher_can_push_only_alloy_from_deployment_main" {
+  command = apply
+  assert {
+    condition = alltrue([for statement in module.iam.alloy_publish_policy.Statement :
+      statement.Resource == module.ecr.repositories["banking-alloy"].arn ||
+      (statement.Resource == "*" && statement.Action == ["ecr:GetAuthorizationToken"])
+    ]) && anytrue([for statement in module.iam.alloy_publish_policy.Statement : contains(statement.Action, "ecr:PutImage")])
+    error_message = "Alloy publishing must have ECR push access only to the Alloy repository."
+  }
+  assert {
+    condition     = jsondecode(module.iam.aws_iam_role_alloy_publish.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == "repo:example/banking-deployment:ref:refs/heads/main"
+    error_message = "Alloy publishing must trust only deployment main, not PRs or other branches."
+  }
+  assert {
+    condition     = jsondecode(module.iam.aws_iam_role_alloy_publish.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:aud"] == "sts.amazonaws.com"
+    error_message = "Alloy publishing must require the AWS OIDC audience."
+  }
+}
+
+run "alloy_publisher_supports_immutable_repository_subjects" {
+  command = plan
+  variables { github_deployment_subject_prefix = "repo:example@123/banking-deployment@789" }
+  assert {
+    condition     = jsondecode(module.iam.aws_iam_role_alloy_publish.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == "repo:example@123/banking-deployment@789:ref:refs/heads/main"
+    error_message = "Immutable Alloy publishing subjects must retain the main branch restriction."
+  }
+}
+
 run "runner_user_data_preserves_registered_instance" {
   command = plan
   assert {

@@ -17,6 +17,30 @@ resource "aws_iam_role_policy" "build" {
   ] })
 }
 
+resource "aws_iam_role" "alloy_publish" {
+  name = "${var.name}-alloy-publish"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Federated = var.github_oidc_arn }
+      Action    = "sts:AssumeRoleWithWebIdentity"
+      Condition = { StringEquals = {
+        "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+        "token.actions.githubusercontent.com:sub" = "${coalesce(var.github_deployment_subject_prefix, "repo:${var.github_owner}/${var.deployment_repository}")}:ref:refs/heads/main"
+      } }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "alloy_publish" {
+  role = aws_iam_role.alloy_publish.id
+  policy = jsonencode({ Version = "2012-10-17", Statement = [
+    { Effect = "Allow", Action = ["ecr:GetAuthorizationToken"], Resource = "*" },
+    { Effect = "Allow", Action = ["ecr:BatchCheckLayerAvailability", "ecr:InitiateLayerUpload", "ecr:UploadLayerPart", "ecr:CompleteLayerUpload", "ecr:PutImage", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"], Resource = var.ecr_repository_arns["banking-alloy"] }
+  ] })
+}
+
 resource "aws_iam_role" "deploy" {
   name = "${var.name}-deploy"
   assume_role_policy = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Principal = { Federated = var.github_oidc_arn
