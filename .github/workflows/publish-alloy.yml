@@ -2,13 +2,6 @@ name: I. Publish Alloy Image
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - deploy/monitoring/Dockerfile
-      - deploy/monitoring/config.alloy
-      - deploy/scripts/publish-alloy.sh
-      - .github/workflows/publish-alloy.yml
 
 permissions:
   contents: read

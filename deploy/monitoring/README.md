@@ -18,7 +18,7 @@ Useful acceptance queries after deployment:
 
 The monitoring operator manages Grafana data sources, dashboards and storage. AWS Terraform creates ALB/ECS/RDS/runner alarms and budget notifications; confirm the SNS email subscription. The budget alert is account-wide and monthly: it is a warning, not a US$100 spending cap or an automatic shutdown.
 
-The pinned Alloy 1.20.0 image passed a prior point-in-time [recorded vulnerability scan](security-review.md). [Publish Alloy](../../.github/workflows/publish-alloy.yml) repeats validation and scanning before pushing, either manually on `main` or after collector changes on `main`. Its run summary provides the exact deployment `alloy_image` and a downloadable provenance manifest. See the [deployment setup](../../README.md#runner-and-images) for publishing credentials and repository variables.
+The pinned Alloy 1.20.0 image passed a prior point-in-time [recorded vulnerability scan](security-review.md). [Publish Alloy](../../.github/workflows/publish-alloy.yml) repeats validation and scanning before pushing, only when manually dispatched on `main`. Its run summary provides the exact deployment `alloy_image` and a downloadable provenance manifest. See the [deployment setup](../../README.md#runner-and-images) for publishing credentials and repository variables.
 
 ## Reuse this image
 
