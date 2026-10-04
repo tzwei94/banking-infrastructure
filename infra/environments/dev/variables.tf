@@ -34,6 +34,12 @@ variable "deletion_protection" {
   default = true
 }
 
+variable "autoscaling_enabled" {
+  type        = bool
+  default     = false
+  description = "Enable reviewed ECS CPU target tracking between two and four tasks."
+}
+
 variable "deployment_repository" {
   default = "banking-deployment"
 }

@@ -78,6 +78,7 @@ resource "aws_iam_role_policy" "deploy" {
       }
       }
     },
+    { Effect = "Allow", Action = ["application-autoscaling:DescribeScalableTargets", "application-autoscaling:DescribeScalingPolicies", "application-autoscaling:ListTagsForResource"], Resource = "*", Condition = { StringEquals = { "aws:RequestedRegion" = var.region } } },
     { Effect = "Allow", Action = ["ec2:Describe*", "elasticloadbalancing:Describe*", "rds:Describe*", "rds:ListTagsForResource", "iam:GetRole", "iam:GetRolePolicy", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies", "iam:GetInstanceProfile", "secretsmanager:DescribeSecret", "secretsmanager:GetResourcePolicy", "logs:DescribeLogGroups", "logs:ListTagsForResource", "logs:GetLogEvents", "logs:DescribeLogStreams", "cloudwatch:DescribeAlarms", "cloudwatch:ListTagsForResource", "sns:GetTopicAttributes", "sns:GetSubscriptionAttributes", "sns:ListTagsForResource", "budgets:ViewBudget", "budgets:ListTagsForResource"], Resource = "*"
     }
     ]

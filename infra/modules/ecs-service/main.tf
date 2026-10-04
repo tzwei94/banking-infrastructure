@@ -117,6 +117,8 @@ resource "aws_ecs_service" "app" {
 
   }
   lifecycle {
+    # Application Auto Scaling owns runtime capacity; releases only promote revisions.
+    ignore_changes = [desired_count]
     precondition {
       condition     = can(regex("^arn:aws:ecs:[a-z0-9-]+:[0-9]+:task-definition/${var.name}-app:[0-9]+$", var.active_task_definition_arn))
       error_message = "Promotion requires an explicit application task ARN."

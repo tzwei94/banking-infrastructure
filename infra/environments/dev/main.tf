@@ -30,6 +30,7 @@ module "ecs_cluster" {
 }
 
 module "ecs_service" {
+  autoscaling_enabled               = var.autoscaling_enabled
   source                            = "../../modules/ecs-service"
   active_task_definition_arn        = var.active_task_definition_arn
   alloy_image                       = var.alloy_image

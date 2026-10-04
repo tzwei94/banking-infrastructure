@@ -145,12 +145,39 @@ class Release:
 
     def healthy(self,active,network):
         self.aws('ecs','wait','services-stable','--cluster',network['cluster'],'--services',self.name)
-        service=self.aws('ecs','describe-services','--cluster',network['cluster'],'--services',self.name)['services'][0]
-        if service['taskDefinition']!=active or service['runningCount']!=2 or service['desiredCount']!=2: raise RuntimeError('Service did not settle on requested task definition')
-        for target in service['loadBalancers']:
-            health=self.aws('elbv2','describe-target-health','--target-group-arn',target['targetGroupArn'])['TargetHealthDescriptions']
-            if sum(t['TargetHealth']['State']=='healthy' for t in health)<2: raise RuntimeError('Two healthy ALB targets are required')
-        self.command([sys.executable,str(Path(__file__).with_name('smoke.py'))])
+        maximum = 4 if self.values.get('autoscaling_enabled', False) else 2
+
+        def snapshot():
+            service = self.aws('ecs', 'describe-services', '--cluster', network['cluster'],
+                               '--services', self.name)['services'][0]
+            if service['taskDefinition'] != active or not 2 <= service['desiredCount'] <= maximum:
+                raise RuntimeError('Service has the wrong task definition or capacity outside the approved range')
+            return service
+
+        # Scale-out stays active during deployments. Allow up to two minutes for
+        # in-range capacity/ALB convergence after the waiter, without rolling back
+        # a healthy candidate just because scaling raced with our health reads.
+        for attempt in range(13):
+            service = snapshot()
+            desired = service['desiredCount']
+            settled = service['runningCount'] == desired and service['pendingCount'] == 0
+            if settled:
+                for target in service['loadBalancers']:
+                    health = self.aws('elbv2', 'describe-target-health', '--target-group-arn',
+                                      target['targetGroupArn'])['TargetHealthDescriptions']
+                    if sum(t['TargetHealth']['State'] == 'healthy' for t in health) < desired:
+                        settled = False
+                if settled:
+                    # Ensure the ALB check covered the currently desired capacity.
+                    confirmed = snapshot()
+                    settled = (confirmed['desiredCount'] == desired
+                               and confirmed['runningCount'] == desired and confirmed['pendingCount'] == 0)
+            if settled:
+                self.command([sys.executable,str(Path(__file__).with_name('smoke.py'))])
+                return
+            if attempt < 12:
+                time.sleep(10)
+        raise RuntimeError('Service tasks and ALB targets did not settle at the approved capacity')
     def record(self,manifest):
         path=self.work/'successful.json';path.write_text(json.dumps(manifest,indent=2));path.chmod(0o600)
         self.aws('s3api','put-object','--bucket',self.bucket,'--key',self.manifest_key,'--body',str(path),'--content-type','application/json')

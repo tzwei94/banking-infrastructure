@@ -8,6 +8,8 @@ Terraform, GitHub Actions, EC2 runner provisioning and release scripts for the c
 
 Terraform has two bootstrap roots, `infra/bootstrap/backend` and `infra/bootstrap/github-oidc`, reusable modules under `infra/modules`, and one application environment at `infra/environments/dev`. Dev owns networking, IAM, ALB, RDS, ECS, runner, secrets metadata, alarms and task/service resources in one S3 state key, `dev/terraform.tfstate`.
 
+Optional [ECS service autoscaling](docs/autoscaling.md) uses a reviewed operator opt-in for 2–4 tasks at a 60% CPU target. App releases preserve runtime capacity and cannot change scaling policies.
+
 Application release scripts use that same root. A saved-plan allowlist rejects every managed change except the application's ECS task definitions and service; infrastructure drift requires an operator plan first. The deployment IAM role has refresh/read permissions and ECS mutation permissions, without IAM resource-management, network or RDS write permissions (`iam:PassRole` is allowed for the ECS roles). Release automation can read the shared dev state, so restrict repository, environment and state-bucket access to trusted operators. Terraform state and plan files remain private.
 
 ```text

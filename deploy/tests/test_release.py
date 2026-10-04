@@ -18,6 +18,91 @@ class Fake(module.Release):
         if active=='candidate' and self.fail=='health': raise RuntimeError('health')
     def record(self,manifest): self.events.append(('record',manifest['active_task_definition_arn']))
 class ReleaseTests(unittest.TestCase):
+    def health_release(self, desired, running=None, pending=0, healthy_targets=None, active='candidate', autoscaling=True):
+        release = object.__new__(module.Release)
+        release.name = 'banking-dev'
+        release.values = {'autoscaling_enabled': autoscaling}
+        service = {'taskDefinition': active, 'desiredCount': desired,
+                   'runningCount': desired if running is None else running,
+                   'pendingCount': pending, 'loadBalancers': [{'targetGroupArn': 'target-group'}]}
+        targets = desired if healthy_targets is None else healthy_targets
+        def aws(*args):
+            if args[:2] == ('ecs', 'describe-services'):
+                return {'services': [service]}
+            if args[:2] == ('elbv2', 'describe-target-health'):
+                return {'TargetHealthDescriptions': [{'TargetHealth': {'State': 'healthy'}} for _ in range(targets)]}
+            return {}
+        release.aws = aws
+        release.command = lambda args: None
+        return release
+
+    def test_release_accepts_healthy_scaled_capacity(self):
+        for count in (2, 3, 4):
+            with self.subTest(count=count):
+                self.health_release(count).healthy('candidate', {'cluster': 'banking-dev'})
+
+    def test_release_rejects_capacity_outside_approved_range(self):
+        for count in (1, 5):
+            with self.subTest(count=count), self.assertRaises(RuntimeError):
+                self.health_release(count).healthy('candidate', {'cluster': 'banking-dev'})
+
+    def test_release_rejects_unsettled_or_unhealthy_scaled_service(self):
+        for options in ({'running': 3}, {'pending': 1}, {'healthy_targets': 3}, {'active': 'old'}):
+            with self.subTest(options=options), patch.object(module.time, 'sleep'), self.assertRaises(RuntimeError):
+                self.health_release(4, **options).healthy('candidate', {'cluster': 'banking-dev'})
+
+    def test_release_retries_scale_out_after_waiter(self):
+        release = self.health_release(3)
+        original = release.aws
+        unsettled = {'taskDefinition': 'candidate', 'desiredCount': 3, 'runningCount': 2,
+                     'pendingCount': 1, 'loadBalancers': [{'targetGroupArn': 'target-group'}]}
+        reads = 0
+        def aws(*args):
+            nonlocal reads
+            if args[:2] == ('ecs', 'describe-services'):
+                reads += 1
+                if reads == 1:
+                    return {'services': [unsettled]}
+            return original(*args)
+        release.aws = aws
+        with patch.object(module.time, 'sleep') as sleep:
+            release.healthy('candidate', {'cluster': 'banking-dev'})
+        sleep.assert_called_once_with(10)
+
+    def test_release_rechecks_capacity_after_target_health(self):
+        release = self.health_release(3)
+        original = release.aws
+        reads = 0
+        def aws(*args):
+            nonlocal reads
+            result = original(*args)
+            if args[:2] == ('ecs', 'describe-services'):
+                reads += 1
+                if reads == 1:
+                    result = {'services': [{**result['services'][0], 'desiredCount': 2, 'runningCount': 2}]}
+            return result
+        release.aws = aws
+        with patch.object(module.time, 'sleep') as sleep:
+            release.healthy('candidate', {'cluster': 'banking-dev'})
+        sleep.assert_called_once_with(10)
+        self.assertGreaterEqual(reads, 4)
+
+    def test_release_convergence_retries_are_bounded(self):
+        release = self.health_release(4, running=3, pending=1)
+        with patch.object(module.time, 'sleep') as sleep, self.assertRaises(RuntimeError):
+            release.healthy('candidate', {'cluster': 'banking-dev'})
+        self.assertEqual(sleep.call_count, 12)
+
+    def test_release_without_autoscaling_still_requires_two_tasks(self):
+        with self.assertRaises(RuntimeError):
+            self.health_release(3, autoscaling=False).healthy('candidate', {'cluster': 'banking-dev'})
+
+    def test_release_plan_rejects_scaling_policy_changes(self):
+        for resource in ('aws_appautoscaling_target.service[0]', 'aws_appautoscaling_policy.cpu[0]'):
+            with self.subTest(resource=resource), self.assertRaises(RuntimeError):
+                module.validate_release_plan({'resource_changes': [{'mode': 'managed',
+                    'address': 'module.ecs_service.' + resource, 'change': {'actions': ['update']}}]})
+
     def test_terraform_failure_preserves_private_log_and_original_error(self):
         release = object.__new__(module.Release)
         error = subprocess.CalledProcessError(1, ['terraform'], output='plan output', stderr='underlying error')

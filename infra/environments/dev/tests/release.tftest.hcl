@@ -241,3 +241,60 @@ run "runner_user_data_preserves_registered_instance" {
     error_message = "User-data edits must preserve the registered runner instance."
   }
 }
+
+run "autoscaling_is_opt_in" {
+  command = plan
+  variables {
+    service_enabled            = true
+    active_task_definition_arn = "arn:aws:ecs:ap-southeast-1:123456789012:task-definition/banking-dev-app:7"
+  }
+  assert {
+    condition     = length(module.ecs_service.autoscaling_target) == 0 && length(module.ecs_service.autoscaling_policy) == 0
+    error_message = "Existing deployments must not gain paid scaling capacity without opting in."
+  }
+}
+
+run "autoscaling_waits_for_existing_service" {
+  command = plan
+  variables { autoscaling_enabled = true }
+  assert {
+    condition     = length(module.ecs_service.autoscaling_target) == 0 && length(module.ecs_service.autoscaling_policy) == 0
+    error_message = "Preparation must not register scaling for an absent service."
+  }
+}
+
+run "autoscaling_is_bounded_and_tracks_cpu" {
+  command = apply
+  variables {
+    autoscaling_enabled        = true
+    service_enabled            = true
+    active_task_definition_arn = "arn:aws:ecs:ap-southeast-1:123456789012:task-definition/banking-dev-app:7"
+  }
+  assert {
+    condition = length(module.ecs_service.autoscaling_target) == 1 && (
+      module.ecs_service.autoscaling_target[0].resource_id == "service/banking-dev/banking-dev" &&
+      module.ecs_service.autoscaling_target[0].service_namespace == "ecs" &&
+      module.ecs_service.autoscaling_target[0].scalable_dimension == "ecs:service:DesiredCount" &&
+      module.ecs_service.autoscaling_target[0].min_capacity == 2 &&
+      module.ecs_service.autoscaling_target[0].max_capacity == 4
+    )
+    error_message = "Scaling must target only this ECS service and stay between two and four tasks."
+  }
+  assert {
+    condition = length(module.ecs_service.autoscaling_policy) == 1 && (
+      module.ecs_service.autoscaling_policy[0].policy_type == "TargetTrackingScaling" &&
+      module.ecs_service.autoscaling_policy[0].target_tracking_scaling_policy_configuration[0].predefined_metric_specification[0].predefined_metric_type == "ECSServiceAverageCPUUtilization" &&
+      module.ecs_service.autoscaling_policy[0].target_tracking_scaling_policy_configuration[0].target_value == 60 &&
+      module.ecs_service.autoscaling_policy[0].target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 30 &&
+      module.ecs_service.autoscaling_policy[0].target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 60 &&
+      !module.ecs_service.autoscaling_policy[0].target_tracking_scaling_policy_configuration[0].disable_scale_in
+    )
+    error_message = "Demo scaling must use 60% CPU with 30-second scale-out and 60-second scale-in cooldowns."
+  }
+  assert {
+    condition = alltrue([for action in ["application-autoscaling:DescribeScalableTargets", "application-autoscaling:DescribeScalingPolicies", "application-autoscaling:ListTagsForResource"] :
+      anytrue([for statement in module.iam.deploy_policy.Statement : contains(statement.Action, action) && try(statement.Condition.StringEquals["aws:RequestedRegion"] == "ap-southeast-1", false)])
+    ]) && alltrue([for statement in module.iam.deploy_policy.Statement : !contains(statement.Action, "application-autoscaling:PutScalingPolicy") && !contains(statement.Action, "application-autoscaling:RegisterScalableTarget")])
+    error_message = "Releases must read scaling configuration without permission to change its capacity limit."
+  }
+}

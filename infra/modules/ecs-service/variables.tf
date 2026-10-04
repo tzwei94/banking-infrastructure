@@ -4,6 +4,12 @@ variable "active_task_definition_arn" {
 
 }
 
+variable "autoscaling_enabled" {
+  type        = bool
+  default     = false
+  description = "Opt in after reviewing the operator plan and approving the two-to-four task cost ceiling."
+}
+
 variable "alloy_image" {
   type = string
   validation {
