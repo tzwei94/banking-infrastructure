@@ -10,6 +10,12 @@ variable "autoscaling_enabled" {
   description = "Opt in after reviewing the operator plan and approving the two-to-four task cost ceiling."
 }
 
+variable "cpu_demo_enabled" {
+  type        = bool
+  default     = false
+  description = "Explicit demo opt-in; ordinary module consumers keep CPU work disabled."
+}
+
 variable "alloy_image" {
   type = string
   validation {

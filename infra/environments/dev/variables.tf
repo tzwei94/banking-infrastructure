@@ -40,6 +40,12 @@ variable "autoscaling_enabled" {
   description = "Enable reviewed ECS CPU target tracking between two and four tasks."
 }
 
+variable "cpu_demo_enabled" {
+  type        = bool
+  default     = true
+  description = "Enable the JWT-protected, bounded CPU demo endpoint in this demo environment."
+}
+
 variable "deployment_repository" {
   default = "banking-deployment"
 }

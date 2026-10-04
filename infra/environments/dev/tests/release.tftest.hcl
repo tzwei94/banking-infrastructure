@@ -55,6 +55,13 @@ variables {
 run "first_prepare_does_not_start_service" {
   command = apply
   assert {
+    condition = anytrue([for container in jsondecode(module.ecs_service.aws_ecs_task_definition_app.container_definitions) :
+      anytrue([for env in container.environment : env.value == "true" if env.name == "CPU_DEMO_ENABLED"])
+      if container.name == "app"
+    ])
+    error_message = "The demo environment must enable the bounded CPU route on the app container only."
+  }
+  assert {
     condition     = alltrue([for repo in values(module.ecr.repositories) : repo.image_tag_mutability == "IMMUTABLE" && !repo.force_delete && repo.image_scanning_configuration[0].scan_on_push])
     error_message = "Release repositories must prevent tag replacement and accidental image deletion, and enable scanning."
   }
@@ -128,6 +135,20 @@ run "first_prepare_does_not_start_service" {
     error_message = "Migrations must run independently of Alloy and runtime initialization."
   }
 
+}
+
+run "cpu_demo_can_be_disabled_without_changing_other_containers" {
+  command = plan
+  variables { cpu_demo_enabled = false }
+  assert {
+    condition = alltrue([for container in jsondecode(module.ecs_service.aws_ecs_task_definition_app.container_definitions) :
+      container.name == "app" ? anytrue([for env in container.environment : env.value == "false" if env.name == "CPU_DEMO_ENABLED"]) :
+      alltrue([for env in container.environment : env.name != "CPU_DEMO_ENABLED"])
+      ]) && alltrue([for container in jsondecode(module.ecs_service.aws_ecs_task_definition_migration.container_definitions) :
+      alltrue([for env in container.environment : env.name != "CPU_DEMO_ENABLED"])
+    ])
+    error_message = "The CPU demo kill switch must disable app work without enabling work in Alloy or migration."
+  }
 }
 run "prepare_retains_explicit_previous_revision" {
   command = plan

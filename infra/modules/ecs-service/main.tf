@@ -155,6 +155,7 @@ locals {
       }, { name = "JWT_ISSUER", value = var.jwt_issuer
       }, { name = "JWT_AUDIENCE", value = var.jwt_audience
       }, { name = "SOURCE_SHA", value = var.source_sha
+      }, { name = "CPU_DEMO_ENABLED", value = tostring(var.cpu_demo_enabled)
     }]),
     secrets = [{ name = "DB_PASSWORD", valueFrom = "${local.secret_arns["app-db"]}:password::"
       }, { name = "JWT_PRIVATE_KEY", valueFrom = "${local.secret_arns["jwt-signing"]}:private_key::"
