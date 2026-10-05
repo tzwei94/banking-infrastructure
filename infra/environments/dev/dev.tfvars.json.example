@@ -16,6 +16,8 @@
   "bootstrap_enabled": false,
   "service_enabled": false,
   "autoscaling_enabled": false,
+  "memory_headroom_enabled": false,
+  "memory_autoscaling_enabled": false,
   "cpu_demo_enabled": true,
   "active_task_definition_arn": "",
   "image": "123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/banking-dev/banking-api@sha256:REPLACE",

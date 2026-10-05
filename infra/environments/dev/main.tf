@@ -30,6 +30,8 @@ module "ecs_cluster" {
 }
 
 module "ecs_service" {
+  memory_headroom_enabled           = var.memory_headroom_enabled
+  memory_autoscaling_enabled        = var.memory_autoscaling_enabled
   cpu_demo_enabled                  = var.cpu_demo_enabled
   autoscaling_enabled               = var.autoscaling_enabled
   source                            = "../../modules/ecs-service"

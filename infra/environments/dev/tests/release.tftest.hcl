@@ -319,3 +319,72 @@ run "autoscaling_is_bounded_and_tracks_cpu" {
     error_message = "Releases must read scaling configuration without permission to change its capacity limit."
   }
 }
+
+run "memory_capacity_and_scaling_are_opt_in" {
+  command = plan
+  variables {
+    autoscaling_enabled        = true
+    service_enabled            = true
+    active_task_definition_arn = "arn:aws:ecs:ap-southeast-1:123456789012:task-definition/banking-dev-app:7"
+  }
+  assert {
+    condition     = module.ecs_service.aws_ecs_task_definition_app.memory == "1024" && length(module.ecs_service.memory_autoscaling_policy) == 0
+    error_message = "Existing profiles must retain 1 GiB and CPU-only scaling until explicitly enabled."
+  }
+}
+
+run "memory_headroom_keeps_cpu_and_one_off_tasks_unchanged" {
+  command = plan
+  variables { memory_headroom_enabled = true }
+  assert {
+    condition     = module.ecs_service.aws_ecs_task_definition_app.cpu == "512" && module.ecs_service.aws_ecs_task_definition_app.memory == "2048" && module.ecs_service.aws_ecs_task_definition_migration.memory == "1024"
+    error_message = "Only service task memory must increase to 2 GiB; CPU and migration size must stay unchanged."
+  }
+  assert {
+    condition     = alltrue([for c in jsondecode(module.ecs_service.aws_ecs_task_definition_app.container_definitions) : c.name == "app" ? (c.memory == 1536 && c.memoryReservation == 1024 && contains(c.environment, { name = "JAVA_TOOL_OPTIONS", value = "-XX:MaxRAMPercentage=55 -XX:+ExitOnOutOfMemoryError" })) : (c.memory == 512 && c.memoryReservation == 256 && contains(c.environment, { name = "OTLP_MEMORY_LIMIT", value = "256MiB" }) && contains(c.environment, { name = "OTLP_MEMORY_SPIKE_LIMIT", value = "64MiB" }))])
+    error_message = "Container limits, reservations and Alloy's heap limiter must increase consistently while retaining JVM native headroom."
+  }
+}
+
+run "memory_policy_shares_capacity_and_preserves_cpu" {
+  command = apply
+  variables {
+    memory_autoscaling_enabled = true
+    autoscaling_enabled        = true
+    service_enabled            = true
+    active_task_definition_arn = "arn:aws:ecs:ap-southeast-1:123456789012:task-definition/banking-dev-app:7"
+  }
+  assert {
+    condition     = length(module.ecs_service.memory_autoscaling_policy) == 1 && length(module.ecs_service.autoscaling_target) == 1 && module.ecs_service.memory_autoscaling_policy[0].resource_id == module.ecs_service.autoscaling_target[0].resource_id && module.ecs_service.autoscaling_policy[0].target_tracking_scaling_policy_configuration[0].target_value == 60 && module.ecs_service.autoscaling_target[0].min_capacity == 2 && module.ecs_service.autoscaling_target[0].max_capacity == 4
+    error_message = "Memory scaling must share the existing 2-4 task target without changing CPU scaling."
+  }
+  assert {
+    condition     = module.ecs_service.memory_autoscaling_policy[0].target_tracking_scaling_policy_configuration[0].target_value == 70 && module.ecs_service.memory_autoscaling_policy[0].target_tracking_scaling_policy_configuration[0].predefined_metric_specification[0].predefined_metric_type == "ECSServiceAverageMemoryUtilization" && module.ecs_service.memory_autoscaling_policy[0].target_tracking_scaling_policy_configuration[0].scale_out_cooldown == 30 && module.ecs_service.memory_autoscaling_policy[0].target_tracking_scaling_policy_configuration[0].scale_in_cooldown == 60 && !module.ecs_service.memory_autoscaling_policy[0].target_tracking_scaling_policy_configuration[0].disable_scale_in
+    error_message = "Memory scaling must use 70%, 30/60 second cooldowns and allow scale-in."
+  }
+}
+
+run "memory_scaling_waits_for_service" {
+  command = plan
+  variables {
+    memory_autoscaling_enabled = true
+    autoscaling_enabled        = true
+  }
+  assert {
+    condition     = length(module.ecs_service.memory_autoscaling_policy) == 0
+    error_message = "Memory policy must wait for autoscaling and a running service."
+  }
+}
+
+run "memory_scaling_requires_capacity_opt_in" {
+  command = plan
+  variables {
+    memory_autoscaling_enabled = true
+    service_enabled            = true
+    active_task_definition_arn = "arn:aws:ecs:ap-southeast-1:123456789012:task-definition/banking-dev-app:7"
+  }
+  assert {
+    condition     = length(module.ecs_service.memory_autoscaling_policy) == 0
+    error_message = "Memory scaling alone must not enable paid scaling capacity."
+  }
+}

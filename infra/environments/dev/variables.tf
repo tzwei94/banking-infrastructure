@@ -46,6 +46,18 @@ variable "cpu_demo_enabled" {
   description = "Enable the JWT-protected, bounded CPU demo endpoint in this demo environment."
 }
 
+variable "memory_headroom_enabled" {
+  type        = bool
+  default     = false
+  description = "Enable the reviewed 2 GiB service task memory profile."
+}
+
+variable "memory_autoscaling_enabled" {
+  type        = bool
+  default     = false
+  description = "Add reviewed 70% memory target tracking; requires autoscaling and service enabled."
+}
+
 variable "deployment_repository" {
   default = "banking-deployment"
 }
