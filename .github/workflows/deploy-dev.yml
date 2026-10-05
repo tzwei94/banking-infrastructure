@@ -18,6 +18,10 @@ on:
       first_release:
         type: boolean
         default: false
+      read_only_smoke:
+        description: Use token and health checks without banking transactions
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -91,6 +95,7 @@ jobs:
           SOURCE_SHA: ${{ inputs.source_sha }}
           ACTION: ${{ inputs.action }}
           FIRST_RELEASE: ${{ inputs.first_release }}
+          READ_ONLY_SMOKE: ${{ inputs.read_only_smoke }}
           STATE_BUCKET: ${{ vars.STATE_BUCKET }}
           AWS_REGION: ${{ vars.AWS_REGION }}
           NAME: banking-dev
