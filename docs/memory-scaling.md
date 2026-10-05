@@ -35,11 +35,19 @@ ECS metric; it is not a guarantee of 30% free physical task memory.
 The new capacity should reduce utilization initially, but JVM heap growth and
 per-task overhead mean this is not a guaranteed halving. Service-average memory
 can also hide an overloaded container. Monitor Java and Alloy individually.
-[AWS documents using soft reservations when specified](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service_utilization.html),
-so do not equate this target with 70% of the 2 GiB hard task limit. Container
-reservations increase from 640 to 1280 MiB in this profile. Confirm the live
-metric's denominator against task memory readings after rollout. JVM heap
-retention can delay scale-in because both policies must agree before removal.
+[AWS's service metric](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service_utilization.html)
+uses memory specified for running tasks. This Fargate profile explicitly sets
+task-level memory, which takes precedence in
+[AWS task resource accounting](https://github.com/aws/amazon-ecs-agent/blob/master/agent/api/task/task.go);
+the expected service denominator is 1024 MiB per task before and 2048 MiB after.
+The fallback to summed container reservations applies when task-level memory is
+absent. Container reservations also increase from 640 to 1280 MiB. With unchanged
+byte usage, doubling capacity would initially halve reported utilization; it
+does not ensure utilization stays low as the JVM grows its heap. Container
+Insights is disabled, so independent MemoryUtilized/MemoryReserved corroboration
+is unavailable. JVM heap retention can delay scale-in because both policies
+must agree before removal. The 70% target is an initial conservative choice,
+not a measured workload optimum.
 
 [AWS permits 2 GiB with 0.5 vCPU](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html).
 With both policies, [AWS scales out when either policy requires it, and scales in
