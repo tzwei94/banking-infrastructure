@@ -30,10 +30,16 @@ Alloy keeps approximately 256 MiB beyond its hard heap limiter for other memory.
 Heap limits are not RSS guarantees; monitor actual container memory after rollout.
 
 The preceding 24-hour CloudWatch service-memory readings on 2026-10-05 were
-67.2% average and 72.7% peak. A 70% target leaves nominal 30% service headroom.
+67.2% average and 72.7% peak. A 70% target leaves 30% headroom in the reported
+ECS metric; it is not a guarantee of 30% free physical task memory.
 The new capacity should reduce utilization initially, but JVM heap growth and
 per-task overhead mean this is not a guaranteed halving. Service-average memory
 can also hide an overloaded container. Monitor Java and Alloy individually.
+[AWS documents using soft reservations when specified](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service_utilization.html),
+so do not equate this target with 70% of the 2 GiB hard task limit. Container
+reservations increase from 640 to 1280 MiB in this profile. Confirm the live
+metric's denominator against task memory readings after rollout. JVM heap
+retention can delay scale-in because both policies must agree before removal.
 
 [AWS permits 2 GiB with 0.5 vCPU](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html).
 With both policies, [AWS scales out when either policy requires it, and scales in
