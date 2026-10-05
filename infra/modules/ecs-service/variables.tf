@@ -16,6 +16,18 @@ variable "cpu_demo_enabled" {
   description = "Explicit demo opt-in; ordinary module consumers keep CPU work disabled."
 }
 
+variable "memory_headroom_enabled" {
+  type        = bool
+  default     = false
+  description = "Opt in to 2 GiB service tasks with larger Java, Alloy and trace heap allowances."
+}
+
+variable "memory_autoscaling_enabled" {
+  type        = bool
+  default     = false
+  description = "Add 70% memory target tracking to the existing reviewed 2-4 task scaling target."
+}
+
 variable "alloy_image" {
   type = string
   validation {

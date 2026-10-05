@@ -21,3 +21,7 @@ output "autoscaling_target" {
 output "autoscaling_policy" {
   value = aws_appautoscaling_policy.cpu
 }
+
+output "memory_autoscaling_policy" {
+  value = aws_appautoscaling_policy.memory
+}

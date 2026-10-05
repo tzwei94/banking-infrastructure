@@ -3,7 +3,7 @@ resource "aws_ecs_task_definition" "app" {
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
   cpu                      = "512"
-  memory                   = "1024"
+  memory                   = var.memory_headroom_enabled ? "2048" : "1024"
   execution_role_arn       = local.execution_role_arns.app
   task_role_arn            = var.aws_iam_role_task.arn
   runtime_platform {
@@ -145,7 +145,7 @@ locals {
   tmp_mount = { sourceVolume = "tmp", containerPath = "/tmp", readOnly = false
   }
   app_container = {
-    name                   = "app", image = var.image, essential = true, user = "10001:10001", cpu = 384, memory = 704, memoryReservation = 512,
+    name                   = "app", image = var.image, essential = true, user = "10001:10001", cpu = 384, memory = var.memory_headroom_enabled ? 1536 : 704, memoryReservation = var.memory_headroom_enabled ? 1024 : 512,
     readonlyRootFilesystem = true, stopTimeout = 30,
     portMappings = [{ containerPort = 8080, protocol = "tcp"
     }],
@@ -169,9 +169,11 @@ locals {
 
   }
   alloy_container = {
-    name                   = "alloy", image = var.alloy_image, essential = true, user = "10001:10001", cpu = 128, memory = 320, memoryReservation = 128,
+    name                   = "alloy", image = var.alloy_image, essential = true, user = "10001:10001", cpu = 128, memory = var.memory_headroom_enabled ? 512 : 320, memoryReservation = var.memory_headroom_enabled ? 256 : 128,
     readonlyRootFilesystem = true, stopTimeout = 60,
-    environment = [{ name = "SERVICE_NAME", value = "banking-api"
+    environment = [{ name = "OTLP_MEMORY_LIMIT", value = var.memory_headroom_enabled ? "256MiB" : "64MiB"
+      }, { name = "OTLP_MEMORY_SPIKE_LIMIT", value = var.memory_headroom_enabled ? "64MiB" : "16MiB"
+      }, { name = "SERVICE_NAME", value = "banking-api"
       }, { name = "LOG_GLOB", value = "/var/log/app/application*.log"
       }, { name = "METRICS_TARGET", value = "127.0.0.1:9000"
       }, { name = "METRICS_PATH", value = "/actuator/prometheus"
