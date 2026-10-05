@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import base64,json,os,ssl,urllib.request,urllib.error,uuid
+mode=os.environ.get('READ_ONLY_SMOKE','false')
+if mode not in ('true','false'): raise SystemExit('READ_ONLY_SMOKE must be true or false')
 base=os.environ['API_URL'].rstrip('/')
 if not base.startswith('https://'): raise SystemExit('API_URL must use HTTPS')
 context=ssl.create_default_context()
@@ -16,6 +18,13 @@ def request(path,body=None,key=None,auth=True):
  if key: headers['Idempotency-Key']=key
  req=urllib.request.Request(base+path,data=json.dumps(body).encode() if body else None,headers=headers)
  with urllib.request.urlopen(req,context=context,timeout=15) as r: return json.load(r)
+if mode=='true':
+ assert request('/readyz',auth=False)['status']=='UP'
+ assert request('/livez',auth=False)['status']=='UP'
+ version=request('/version',auth=False)
+ assert isinstance(version.get('version'),str) and isinstance(version.get('source'),str)
+ print('PASS: Basic token issuance and public readiness, liveness and version; read-only release smoke')
+ raise SystemExit(0)
 prefix='/accounts/'+account
 before=request(prefix+'/balance')['balance']
 key=str(uuid.uuid4())
