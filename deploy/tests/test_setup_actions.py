@@ -84,5 +84,21 @@ class ActionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.helper.validate_url('https://user:password@example.com/path')
 
+    def test_github_configuration_separates_publisher_variables_from_deploy_environment(self):
+        contract = {'build_role_arn': 'arn:build', 'alloy_publish_role_arn': 'arn:alloy',
+                    'deploy_role_arn': 'arn:deploy', 'ecr_repositories': {'banking-api': 'ecr/api', 'banking-alloy': 'ecr/alloy'}}
+        with patch.object(self.helper, 'contract', return_value=contract), \
+             patch.object(self.helper, 'repository_names', return_value={'app': 'example/app', 'deploy': 'example/infra'}), \
+             patch.object(self.helper, 'dev_profile', return_value={'state_bucket': 'state'}), \
+             patch('setup_actions.approved', side_effect=[True, False]), \
+             patch.object(self.helper, 'run') as run:
+            self.helper.github_configure()
+        writes = [call.args[0] for call in run.call_args_list if call.args[0][:3] == ['gh', 'variable', 'set']]
+        self.assertIn(['gh', 'variable', 'set', 'AWS_ALLOY_PUBLISH_ROLE_ARN', '--repo', 'example/infra', '--body', 'arn:alloy'], writes)
+        self.assertIn(['gh', 'variable', 'set', 'ALLOY_REPOSITORY', '--repo', 'example/infra', '--body', 'ecr/alloy'], writes)
+        self.assertIn(['gh', 'variable', 'set', 'AWS_REGION', '--repo', 'example/infra', '--body', 'ap-southeast-1'], writes)
+        self.assertIn(['gh', 'variable', 'set', 'DEPLOYMENT_REPOSITORY', '--repo', 'example/app', '--body', 'example/infra'], writes)
+        self.assertIn(['gh', 'variable', 'set', 'AWS_DEPLOY_ROLE_ARN', '--repo', 'example/infra', '--env', 'dev', '--body', 'arn:deploy'], writes)
+
 if __name__ == '__main__':
     unittest.main()

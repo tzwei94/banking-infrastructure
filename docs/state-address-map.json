@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "note": "Address prefixes only. Preserve existing count/for_each instance suffixes. This is a migration inventory, not an executable migration. No live state was inspected.",
+  "note": "Historical address prefixes for the original consolidation only. Preserve existing count/for_each instance suffixes. Removed registry secrets (including the push resource and runtime registry-credential instances) are not current import targets; ECR additions are not listed. Read state-migration.md before use. This is not an executable migration or a complete current inventory. No live state was inspected.",
   "resources": [
     {
       "old_state_key": "foundation/terraform.tfstate",

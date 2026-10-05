@@ -22,13 +22,14 @@ output "run_task" {
 
 output "contract" {
   value = {
-    alb_dns_name        = module.alb.aws_lb_api.dns_name
-    database_identifier = module.rds.aws_db_instance_database.id
-    runner_instance_id  = module.runner.aws_instance_runner.id
-    alarm_topic_arn     = module.cloudwatch.aws_sns_topic_alarms.arn
-    build_role_arn      = module.iam.aws_iam_role_build.arn
-    deploy_role_arn     = module.iam.aws_iam_role_deploy.arn
-    ecr_repositories    = { for key, repo in module.ecr.repositories : key => repo.repository_url }
-    secret_arns         = { for key, secret in module.secrets.aws_secretsmanager_secret_runtime : key => secret.arn }
+    alb_dns_name           = module.alb.aws_lb_api.dns_name
+    database_identifier    = module.rds.aws_db_instance_database.id
+    runner_instance_id     = module.runner.aws_instance_runner.id
+    alarm_topic_arn        = module.cloudwatch.aws_sns_topic_alarms.arn
+    build_role_arn         = module.iam.aws_iam_role_build.arn
+    alloy_publish_role_arn = module.iam.aws_iam_role_alloy_publish.arn
+    deploy_role_arn        = module.iam.aws_iam_role_deploy.arn
+    ecr_repositories       = { for key, repo in module.ecr.repositories : key => repo.repository_url }
+    secret_arns            = { for key, secret in module.secrets.aws_secretsmanager_secret_runtime : key => secret.arn }
   }
 }

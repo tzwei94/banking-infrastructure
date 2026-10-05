@@ -1,4 +1,4 @@
-name: Promote or roll back a tested digest
+name: B. Deploy or Roll Back
 on:
   workflow_dispatch:
     inputs:
@@ -6,8 +6,8 @@ on:
         description: Tested banking-api repository@sha256 digest
         required: true
       alloy_image:
-        description: Validated banking-alloy repository@sha256 digest
-        required: true
+        description: Alloy digest override (blank uses latest successful publish manifest)
+        required: false
       source_sha:
         description: Full application source commit SHA
         required: true
@@ -16,6 +16,10 @@ on:
         options: [deploy, rollback]
         default: deploy
       first_release:
+        type: boolean
+        default: false
+      read_only_smoke:
+        description: Use token and health checks without banking transactions
         type: boolean
         default: false
 permissions:
@@ -30,9 +34,50 @@ jobs:
     runs-on: [self-hosted, linux, x64, banking-deploy]
     permissions:
       contents: read
+      actions: read
       id-token: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Select latest successful Alloy publication
+        if: inputs.alloy_image == ''
+        id: alloy_run
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const { selectRun } = require('./deploy/scripts/resolve-alloy.cjs');
+            const run = await selectRun(github, context);
+            core.setOutput('run', JSON.stringify(run));
+            core.setOutput('run_id', run.id);
+            core.setOutput('artifact', run.artifact);
+      - name: Download selected Alloy manifest
+        if: inputs.alloy_image == ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ steps.alloy_run.outputs.artifact }}
+          run-id: ${{ steps.alloy_run.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/alloy-manifest-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Resolve Alloy deployment digest
+        id: alloy
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          ALLOY_OVERRIDE: ${{ inputs.alloy_image }}
+          ALLOY_REPOSITORY: ${{ vars.ALLOY_REPOSITORY }}
+          ALLOY_RUN: ${{ steps.alloy_run.outputs.run }}
+          MANIFEST_PATH: ${{ runner.temp }}/alloy-manifest-${{ github.run_id }}-${{ github.run_attempt }}/alloy-image-manifest.json
+        with:
+          script: |
+            const fs = require('node:fs');
+            const { resolveImage } = require('./deploy/scripts/resolve-alloy.cjs');
+            const override = process.env.ALLOY_OVERRIDE;
+            const run = override ? undefined : JSON.parse(process.env.ALLOY_RUN);
+            const manifest = override ? undefined : JSON.parse(fs.readFileSync(process.env.MANIFEST_PATH, 'utf8'));
+            const image = resolveImage(override, process.env.ALLOY_REPOSITORY, manifest, run, `${context.repo.owner}/${context.repo.repo}`);
+            core.setOutput('image', image);
+            await core.summary.addHeading('Selected Alloy image')
+              .addCodeBlock(image)
+              .addRaw(override ? 'Source: explicit digest override.' : `Source: Alloy publish run ${run.id}, attempt ${run.run_attempt}.`)
+              .write();
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
         with:
           terraform_version: 1.16.1
@@ -46,10 +91,11 @@ jobs:
         env:
           DEV_TFVARS_JSON: ${{ vars.DEV_TFVARS_JSON }}
           IMAGE: ${{ inputs.image }}
-          ALLOY_IMAGE: ${{ inputs.alloy_image }}
+          ALLOY_IMAGE: ${{ steps.alloy.outputs.image }}
           SOURCE_SHA: ${{ inputs.source_sha }}
           ACTION: ${{ inputs.action }}
           FIRST_RELEASE: ${{ inputs.first_release }}
+          READ_ONLY_SMOKE: ${{ inputs.read_only_smoke }}
           STATE_BUCKET: ${{ vars.STATE_BUCKET }}
           AWS_REGION: ${{ vars.AWS_REGION }}
           NAME: banking-dev

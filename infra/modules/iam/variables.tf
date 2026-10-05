@@ -22,7 +22,7 @@ variable "bootstrap_enabled" {
 }
 
 variable "deployment_repository" {
-  default = "banking-deployment"
+  default = "banking-infrastructure"
 }
 
 variable "github_environment" {

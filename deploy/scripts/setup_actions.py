@@ -380,9 +380,15 @@ class DeploymentActions:
         if not approved('Write GitHub Actions variables for these repositories and environment?'):
             return
         common = {'AWS_REGION': self.settings['region']}
-        variables = {'app': {**common, 'AWS_BUILD_ROLE_ARN': contract['build_role_arn'], 'IMAGE_REPOSITORY': contract['ecr_repositories']['banking-api']},
+        variables = {'app': {**common, 'AWS_BUILD_ROLE_ARN': contract['build_role_arn'], 'IMAGE_REPOSITORY': contract['ecr_repositories']['banking-api'],
+                             'DEPLOYMENT_REPOSITORY': repositories['deploy']},
                      'deploy': {**common, 'AWS_DEPLOY_ROLE_ARN': contract['deploy_role_arn'], 'STATE_BUCKET': profile['state_bucket'],
                                 'API_URL': 'https://'+self.settings['domain'], 'DEV_TFVARS_JSON': json.dumps(profile)}}
+        # Alloy publishing uses a main-branch OIDC subject, without the dev environment.
+        alloy_variables = {**common, 'AWS_ALLOY_PUBLISH_ROLE_ARN': contract['alloy_publish_role_arn'],
+                           'ALLOY_REPOSITORY': contract['ecr_repositories']['banking-alloy']}
+        for name, value in alloy_variables.items():
+            self.run(['gh', 'variable', 'set', name, '--repo', repositories['deploy'], '--body', value])
         for kind, values in variables.items():
             for name, value in values.items():
                 args = ['gh', 'variable', 'set', name, '--repo', repositories[kind]]

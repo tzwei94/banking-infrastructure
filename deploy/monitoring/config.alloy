@@ -52,8 +52,8 @@ otelcol.receiver.otlp "application" {
 }
 otelcol.processor.memory_limiter "application" {
   check_interval = "1s"
-  limit = "64MiB"
-  spike_limit = "16MiB"
+  limit = coalesce(sys.env("OTLP_MEMORY_LIMIT"), "64MiB")
+  spike_limit = coalesce(sys.env("OTLP_MEMORY_SPIKE_LIMIT"), "16MiB")
   output { traces = [otelcol.processor.batch.application.input] }
 }
 otelcol.processor.batch "application" {

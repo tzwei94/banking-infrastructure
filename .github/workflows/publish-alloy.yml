@@ -1,0 +1,43 @@
+name: I. Publish Alloy Image
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      ALLOY_REPOSITORY: ${{ vars.ALLOY_REPOSITORY }}
+      SOURCE_SHA: ${{ github.sha }}
+    outputs:
+      alloy_image: ${{ steps.publish.outputs.alloy_image }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Authenticate to AWS with OIDC
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ALLOY_PUBLISH_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Build, validate, scan and publish Alloy
+        id: publish
+        env:
+          ALLOY_MANIFEST_PATH: ${{ runner.temp }}/alloy-image-manifest.json
+        run: deploy/scripts/publish-alloy.sh
+      - name: Save Alloy deployment input
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: alloy-image-manifest-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/alloy-image-manifest.json
+          if-no-files-found: error
+          retention-days: 90

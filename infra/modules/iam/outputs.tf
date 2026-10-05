@@ -27,6 +27,14 @@ output "build_policy" {
   value = jsondecode(aws_iam_role_policy.build.policy)
 }
 
+output "aws_iam_role_alloy_publish" {
+  value = aws_iam_role.alloy_publish
+}
+
+output "alloy_publish_policy" {
+  value = jsondecode(aws_iam_role_policy.alloy_publish.policy)
+}
+
 output "execution_image_policies" {
   value = { for key, policy in aws_iam_role_policy.execution_images : key => jsondecode(policy.policy) }
 }
